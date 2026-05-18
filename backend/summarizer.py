@@ -7,6 +7,20 @@ from llm_sanitize import strip_llm_artifacts
 
 logger = logging.getLogger(__name__)
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
 class Summarizer:
     """文本总结器，使用OpenAI API生成多语言摘要"""
     
@@ -37,6 +51,11 @@ class Summarizer:
         # 允许前端指定模型，覆盖硬编码的 gpt-3.5-turbo / gpt-4o
         self.fast_model     = model or "gpt-3.5-turbo"
         self.advanced_model = model or "gpt-4o"
+        self.transcript_exact_mode = _env_bool("TRANSCRIPT_EXACT_MODE", True)
+        self.summary_single_pass_tokens = _env_int("SUMMARY_SINGLE_PASS_TOKEN_LIMIT", 12000)
+        self.summary_max_output_tokens = _env_int("SUMMARY_MAX_OUTPUT_TOKENS", 12000)
+        self.summary_chunk_output_tokens = _env_int("SUMMARY_CHUNK_OUTPUT_TOKENS", 4000)
+        self.summary_chunk_chars = _env_int("SUMMARY_CHUNK_CHARS", 12000)
         
         # 支持的语言映射
         self.language_map = {
@@ -67,10 +86,15 @@ class Summarizer:
         try:
             if not self.client:
                 logger.warning("OpenAI API不可用，返回原始转录")
-                return raw_transcript
+                return self._format_verbatim_transcript(raw_transcript)
 
             # 预处理：仅移除时间戳与元信息，保留全部口语/重复内容
             preprocessed = self._remove_timestamps_and_meta(raw_transcript)
+
+            if self.transcript_exact_mode:
+                logger.info("逐字保真模式已启用，跳过LLM转录优化")
+                return self._format_verbatim_transcript(preprocessed)
+
             # 使用JS策略：按字符长度分块（更贴近tokens上限，避免估算误差）
             detected_lang_code = self._detect_transcript_language(preprocessed)
             max_chars_per_chunk = 4000  # 对齐JS：每块最大约4000字符
@@ -514,15 +538,38 @@ class Summarizer:
             # 跳过时间戳与元信息
             if (s.startswith('**[') and s.endswith(']**')):
                 continue
-            if s.startswith('# '):
-                # 跳过顶级标题（通常是视频标题，可在最终加回）
+            if s in {'# Video Transcription', '## Transcription Content', '# 视频转录', '## 转录内容'}:
                 continue
-            if s.startswith('**检测语言:**') or s.startswith('**语言概率:**'):
+            if (
+                s.startswith('**Detected Language:**') or
+                s.startswith('**Language Probability:**') or
+                s.startswith('**检测语言:**') or
+                s.startswith('**语言概率:**')
+            ):
                 continue
             kept.append(line)
         # 规范空行
         cleaned = '\n'.join(kept)
         return cleaned
+
+    def _format_verbatim_transcript(self, text: str) -> str:
+        """逐字保留转录正文，只压缩空行和移除包装元信息，不修词、不改句。"""
+        cleaned = self._remove_timestamps_and_meta(text).replace("\r\n", "\n")
+        lines = [line.rstrip() for line in cleaned.split("\n")]
+        paragraphs = []
+        current = []
+
+        for line in lines:
+            if line.strip():
+                current.append(line.strip())
+            elif current:
+                paragraphs.append("\n".join(current))
+                current = []
+
+        if current:
+            paragraphs.append("\n".join(current))
+
+        return "\n\n".join(paragraphs).strip()
 
     def _enforce_paragraph_max_chars(self, text: str, max_chars: int = 400) -> str:
         """按段落拆分并确保每段不超过max_chars，必要时按句子边界拆为多段。"""
@@ -627,6 +674,8 @@ class Summarizer:
             # 跳过时间戳、标题、元数据
             if (line.startswith('**[') and line.endswith(']**') or
                 line.startswith('#') or
+                line.startswith('**Detected Language:**') or
+                line.startswith('**Language Probability:**') or
                 line.startswith('**检测语言:**') or
                 line.startswith('**语言概率:**') or
                 not line):
@@ -691,7 +740,12 @@ class Summarizer:
             if line.strip().startswith('# ') or line.strip().startswith('## '):
                 continue
             # 跳过检测语言等元信息行
-            if line.strip().startswith('**检测语言:**') or line.strip().startswith('**语言概率:**'):
+            if (
+                line.strip().startswith('**Detected Language:**') or
+                line.strip().startswith('**Language Probability:**') or
+                line.strip().startswith('**检测语言:**') or
+                line.strip().startswith('**语言概率:**')
+            ):
                 continue
             # 保留非空文本行
             if line.strip():
@@ -987,7 +1041,7 @@ Core requirements:
             
             # 估算转录文本长度，决定是否需要分块摘要
             estimated_tokens = self._estimate_tokens(transcript)
-            max_summarize_tokens = 4000  # 提高限制，优先使用单文本处理以获得更好的总结质量
+            max_summarize_tokens = self.summary_single_pass_tokens
             
             if estimated_tokens <= max_summarize_tokens:
                 # 短文本直接摘要
@@ -1009,17 +1063,22 @@ Core requirements:
         language_name = self.language_map.get(target_language, "中文（简体）")
         
         # 构建英文提示词，适用于所有目标语言
-        system_prompt = f"""You are an expert editor. Write a concise EXECUTIVE SUMMARY in {language_name} of the following material.
+        system_prompt = f"""You are an expert editor. Write a DETAILED STRUCTURED SUMMARY in {language_name} of the following material (meeting-notes / study-notes style, not a one-paragraph blurb).
 
 Hard rules:
-- Length: about 180–450 words in {language_name} (use the lower end if the source is short). Never reproduce long verbatim quotes or extended sentence-by-sentence rewrites of the transcript.
-- Content: main thesis, 3–7 key takeaways, important conclusions, and critical facts or numbers only. Tight prose; short bullet lists are OK for takeaways.
-- Do NOT restate the full transcript, do NOT add preamble ("Here is…"), and do NOT add closings such as offers to revise or "let me know if…" / 客套尾注.
-- Markdown: optional `## Key takeaways` then paragraphs; avoid decorative filler headings.
+- Length: as detailed as needed to cover the source well. Do not compress just to be brief; for rich source material, write a long summary with enough context for each point to stand alone.
+- Structure (use Markdown headings in {language_name}):
+  - `## 概述` / Overview — context and main thesis (2–4 sentences)
+  - `## 主要议题` / Main topics — one subsection per major theme; explain arguments, examples, and reasoning (not just labels)
+  - `## 关键结论与要点` / Key conclusions — bullet or numbered list of takeaways with enough detail to stand alone
+  - `## 重要事实与数据` / Facts & figures — names, dates, metrics, definitions mentioned (if any)
+  - `## 行动项或建议` / Actions & recommendations — only if present in the source
+- Preserve nuance: causal links, contrasts, caveats, and speaker intent where relevant. Do NOT reduce everything to 3–7 ultra-short bullets.
+- Do NOT restate the full transcript verbatim; do NOT add preamble ("Here is…") or meta-closings ("let me know…" / 客套尾注).
 
 Output ONLY the summary body in {language_name}."""
 
-        user_prompt = f"""Summarize the following content in {language_name}. Follow the system rules strictly (brief executive summary, no meta-commentary):
+        user_prompt = f"""Produce a detailed structured summary in {language_name}. Follow the system rules (rich coverage, clear sections, no meta-commentary):
 
 {transcript}"""
 
@@ -1032,8 +1091,8 @@ Output ONLY the summary body in {language_name}."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=2200,
-            temperature=0.25
+            max_tokens=self.summary_max_output_tokens,
+            temperature=0.2
         )
         
         summary = strip_llm_artifacts(response.choices[0].message.content or "")
@@ -1047,7 +1106,7 @@ Output ONLY the summary body in {language_name}."""
         language_name = self.language_map.get(target_language, "中文（简体）")
 
         # 使用JS策略：按字符进行智能分块（段落>句子）
-        chunks = self._smart_chunk_text(transcript, max_chars_per_chunk=4000)
+        chunks = self._smart_chunk_text(transcript, max_chars_per_chunk=self.summary_chunk_chars)
         logger.info(f"分割为 {len(chunks)} 个块进行摘要")
         
         chunk_summaries = []
@@ -1056,20 +1115,21 @@ Output ONLY the summary body in {language_name}."""
         for i, chunk in enumerate(chunks):
             logger.info(f"正在摘要第 {i+1}/{len(chunks)} 块...")
             
-            system_prompt = f"""You are a summarization expert. Write a brief section summary in {language_name}.
+            system_prompt = f"""You are a summarization expert. Write a DETAILED section summary in {language_name}.
 
 This is part {i+1} of {len(chunks)} of the full transcript.
 
 Rules:
-- About 80–160 words in {language_name}; bullets OK for key points.
-- Do not echo the transcript verbatim; capture only new information in this segment.
+- Cover all major points in this segment with enough detail to stand alone. Do not compress just to satisfy a short word count.
+- Use short `###` subheadings per sub-topic if helpful; bullets OK but each point should carry enough context (who/what/why).
+- Do not echo the transcript verbatim; preserve arguments, examples, numbers, and conclusions from this segment.
 - No preamble or meta-closings."""
 
-            user_prompt = f"""[Part {i+1}/{len(chunks)}] Summarize in {language_name} (80–160 words, tight prose):
+            user_prompt = f"""[Part {i+1}/{len(chunks)}] Write a detailed section summary in {language_name}:
 
 {chunk}
 
-Output content only, no headings like "Summary:"."""
+Output content only."""
 
             try:
                 response = self.client.chat.completions.create(
@@ -1078,8 +1138,8 @@ Output content only, no headings like "Summary:"."""
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=600,
-                    temperature=0.25
+                    max_tokens=self.summary_chunk_output_tokens,
+                    temperature=0.2
                 )
                 
                 chunk_summary = strip_llm_artifacts(response.choices[0].message.content or "")
@@ -1153,14 +1213,14 @@ Output content only, no headings like "Summary:"."""
         language_name = self.language_map.get(target_language, "中文（简体）")
         
         try:
-            system_prompt = f"""You integrate partial summaries into ONE concise executive summary in {language_name}.
+            system_prompt = f"""You integrate partial summaries into ONE detailed, well-structured final summary in {language_name}.
 
 Rules:
-- Total length about 280–650 words in {language_name}; remove duplication, do not expand into a transcript-length rewrite.
-- Markdown: paragraphs separated by blank lines; optional `## Key takeaways` only if it adds clarity.
+- Length should scale with the source material. Remove duplication but KEEP substantive detail; do not over-compress.
+- Merge into clear sections: Overview, Main topics (with subsections), Key conclusions, Important facts/figures, Actions/recommendations (if any).
 - No preamble, no meta-closings (e.g. offers to revise or "let me know")."""
 
-            user_prompt = f"""Merge the following partial summaries into one executive summary in {language_name}:
+            user_prompt = f"""Merge the following partial summaries into one detailed structured summary in {language_name}:
 
 {combined_summaries}"""
 
@@ -1170,8 +1230,8 @@ Rules:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=2200,
-                temperature=0.25
+                max_tokens=self.summary_max_output_tokens,
+                temperature=0.2
             )
 
             return strip_llm_artifacts(response.choices[0].message.content or "")

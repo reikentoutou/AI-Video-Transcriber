@@ -2,36 +2,41 @@
 
 # AI视频转录器安装脚本
 
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+VENV_DIR="venv"
+
 echo "🚀 AI视频转录器安装脚本"
 echo "=========================="
 
 # 检查Python版本
 echo "检查Python环境..."
-python_version=$(python3 --version 2>&1 | cut -d' ' -f2)
-if [[ -z "$python_version" ]]; then
+if ! command -v python3 &> /dev/null; then
     echo "❌ 未找到Python3，请先安装Python 3.8或更高版本"
     exit 1
 fi
+python_version=$(python3 --version 2>&1 | cut -d' ' -f2)
 echo "✅ Python版本: $python_version"
 
-# 检查pip
-if ! command -v pip3 &> /dev/null; then
-    echo "❌ 未找到pip3，请先安装pip"
-    exit 1
+# 创建并配置虚拟环境
+echo ""
+echo "配置 Python 虚拟环境..."
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv "$VENV_DIR"
+    echo "✅ 已创建虚拟环境: $VENV_DIR"
+else
+    echo "✅ 虚拟环境已存在: $VENV_DIR"
 fi
-echo "✅ pip已安装"
 
-# 安装Python依赖
+# 安装Python依赖（在 venv 内，避免 PEP 668 系统环境限制）
 echo ""
 echo "安装Python依赖..."
-pip3 install -r requirements.txt
-
-if [ $? -eq 0 ]; then
-    echo "✅ Python依赖安装完成"
-else
-    echo "❌ Python依赖安装失败"
-    exit 1
-fi
+"$VENV_DIR/bin/python" -m pip install --upgrade pip
+"$VENV_DIR/bin/pip" install -r requirements.txt
+echo "✅ Python依赖安装完成"
 
 # 检查FFmpeg
 echo ""
@@ -80,7 +85,9 @@ echo "  1. (可选) 配置OpenAI API密钥以启用智能摘要功能"
 echo "     export OPENAI_API_KEY=your_api_key_here"
 echo ""
 echo "  2. 启动服务:"
-echo "     python3 start.py"
+echo "     source venv/bin/activate"
+echo "     python start.py"
+echo "     # 或直接: ./venv/bin/python start.py"
 echo ""
 echo "  3. 打开浏览器访问: http://localhost:8000"
 echo ""

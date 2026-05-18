@@ -187,7 +187,13 @@ AI-Video-Transcriber/
 | `OPENAI_API_KEY` | API密钥（服务端默认值） | - | 否，可在UI中配置 |
 | `HOST` | 服务器地址 | `0.0.0.0` | 否 |
 | `PORT` | 服务器端口 | `8000` | 否 |
-| `WHISPER_MODEL_SIZE` | Whisper模型大小 | `base` | 否 |
+| `WHISPER_MODEL_SIZE` | Whisper模型大小 | `large-v3` | 否 |
+| `WHISPER_VAD_FILTER` | 是否启用VAD静音过滤；追求完整性时保持 `false` | `false` | 否 |
+| `TRANSCRIPT_EXACT_MODE` | ASR/字幕提取后逐字保留转录正文，不再用LLM改写 | `true` | 否 |
+| `SUMMARY_SINGLE_PASS_TOKEN_LIMIT` | 进入分块摘要前的估算token阈值 | `12000` | 否 |
+| `SUMMARY_MAX_OUTPUT_TOKENS` | 最终摘要最大输出tokens | `12000` | 否 |
+| `SUMMARY_CHUNK_OUTPUT_TOKENS` | 分块摘要每块最大输出tokens | `4000` | 否 |
+| `SUMMARY_CHUNK_CHARS` | 长文本摘要分块字符数 | `12000` | 否 |
 | `UPLOAD_MAX_MB` | 本地上传单文件大小上限（MB） | `200` | 否 |
 
 另提供可选接口 `POST /api/process-upload`，与向 `/api/process-video` 提交 `file`  multipart 字段行为一致。

@@ -165,7 +165,7 @@ async def _run_post_extract_pipeline(
 
     tasks[task_id].update({
         "progress": 55,
-        "message": "正在优化转录文本...",
+        "message": "正在整理转录文本...",
     })
     save_tasks(tasks)
     await broadcast_task_update(task_id, tasks[task_id])

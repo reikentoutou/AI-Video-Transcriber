@@ -187,7 +187,13 @@ AI-Video-Transcriber/
 | `OPENAI_API_KEY` | API key (server-side default) | - | No — can be set in UI instead |
 | `HOST` | Server address | `0.0.0.0` | No |
 | `PORT` | Server port | `8000` | No |
-| `WHISPER_MODEL_SIZE` | Whisper model size | `base` | No |
+| `WHISPER_MODEL_SIZE` | Whisper model size | `large-v3` | No |
+| `WHISPER_VAD_FILTER` | Enable VAD silence filtering. Keep `false` for maximum completeness | `false` | No |
+| `TRANSCRIPT_EXACT_MODE` | Keep transcript text verbatim after ASR/subtitle extraction; no LLM rewriting | `true` | No |
+| `SUMMARY_SINGLE_PASS_TOKEN_LIMIT` | Estimated token limit before switching to chunked summarization | `12000` | No |
+| `SUMMARY_MAX_OUTPUT_TOKENS` | Maximum output tokens for final summaries | `12000` | No |
+| `SUMMARY_CHUNK_OUTPUT_TOKENS` | Maximum output tokens per chunk summary | `4000` | No |
+| `SUMMARY_CHUNK_CHARS` | Character size for long-summary chunks | `12000` | No |
 | `UPLOAD_MAX_MB` | Maximum upload size for local files (MB) | `200` | No |
 
 An optional dedicated endpoint `POST /api/process-upload` exists with the same behavior as sending `file` to `/api/process-video`.
