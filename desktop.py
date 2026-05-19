@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import socket
 import sys
 import threading
@@ -11,9 +12,6 @@ import time
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen
-
-import uvicorn
-import webview
 
 
 APP_NAME = "AI Video Transcriber"
@@ -38,12 +36,41 @@ def _find_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _configure_desktop_logging(data_dir: Path) -> None:
+    log_dir = data_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+    handlers: list[logging.Handler] = [
+        logging.FileHandler(log_dir / "desktop.log", encoding="utf-8")
+    ]
+    stderr = getattr(sys, "stderr", None)
+    if stderr is not None and not getattr(sys, "frozen", False):
+        handlers.append(logging.StreamHandler(stderr))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+
+
 def _prepare_environment(base_dir: Path, port: int) -> None:
     backend_dir = base_dir / "backend"
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
 
     data_dir = _user_data_dir()
+    _configure_desktop_logging(data_dir)
+
     temp_dir = data_dir / "temp"
     temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -76,6 +103,9 @@ def main() -> None:
     base_dir = _base_dir()
     port = _find_free_port()
     _prepare_environment(base_dir, port)
+
+    import uvicorn
+    import webview
 
     from main import app
 
