@@ -26,14 +26,16 @@
 
 ### Windows 桌面版
 
-发布 Release 后，Windows 用户可以直接从 GitHub Releases 下载：
+Windows 11 用户可以直接从 GitHub Releases 下载桌面版：
 
 - `AI-Video-Transcriber-Setup-<version>.exe`：标准 Windows 安装包
 - `AI-Video-Transcriber-Windows-<version>.zip`：免安装便携版目录
 
-桌面版会在本机 `127.0.0.1` 启动 FastAPI 服务，并用原生桌面窗口打开页面。临时文件会写入当前 Windows 用户的本地 AppData 目录。窗口依赖 Microsoft Edge WebView2 Runtime，较新的 Windows 通常已预装。
+安装包会内置运行所需的 Python 依赖、`ffmpeg.exe` 和 `ffprobe.exe`。正常的全新 Windows 11 电脑通常无需额外安装运行环境：下载 `.exe` 后双击安装，或下载 `.zip` 后解压并运行 `AI Video Transcriber.exe` 即可启动。
 
-### 环境要求
+桌面版会在本机 `127.0.0.1` 启动 FastAPI 服务，并用原生桌面窗口打开页面。临时文件会写入当前 Windows 用户的本地 AppData 目录。窗口依赖 Microsoft Edge WebView2 Runtime，Windows 11 通常已预装；如果启动时提示缺少 WebView2，请安装 Microsoft Edge WebView2 Evergreen Runtime。首次使用 Whisper 转录时可能会自动下载 Whisper 模型，因此需要网络；摘要和翻译功能需要在页面中配置任意 OpenAI 兼容服务商的 API Key。
+
+### 源码 / Docker 环境要求
 
 - Python 3.8+
 - FFmpeg（链接下载与本地上传音视频转码均需）

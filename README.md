@@ -28,14 +28,16 @@ An AI-powered tool to transcribe and summarize videos and podcasts — paste a U
 
 ### Windows Desktop App
 
-Windows users can download the installer from GitHub Releases once a release is published:
+Windows 11 users can download the desktop app directly from GitHub Releases:
 
 - `AI-Video-Transcriber-Setup-<version>.exe` — standard Windows installer
 - `AI-Video-Transcriber-Windows-<version>.zip` — portable app folder
 
-The desktop app runs the FastAPI service locally on `127.0.0.1` and opens it in a native desktop window. Temporary files are stored under the current Windows user's local app data directory. It uses the Microsoft Edge WebView2 runtime, which is preinstalled on most current Windows systems.
+The installer bundles the required Python dependencies, `ffmpeg.exe`, and `ffprobe.exe`. On a normal fresh Windows 11 PC, no extra runtime setup is usually required: download the `.exe` and install it, or download the `.zip`, extract it, and run `AI Video Transcriber.exe`.
 
-### Prerequisites
+The desktop app runs the FastAPI service locally on `127.0.0.1` and opens it in a native desktop window. Temporary files are stored under the current Windows user's local app data directory. It uses the Microsoft Edge WebView2 runtime, which is usually preinstalled on Windows 11; if startup reports that WebView2 is missing, install the Microsoft Edge WebView2 Evergreen Runtime. The first Whisper transcription may automatically download a Whisper model, so network access is required. Summary and translation features require an API key from an OpenAI-compatible provider configured in the UI.
+
+### Source / Docker Prerequisites
 
 - Python 3.8+
 - FFmpeg (required for yt-dlp audio extraction and for normalizing uploaded media)
