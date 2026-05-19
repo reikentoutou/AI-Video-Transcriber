@@ -1,0 +1,86 @@
+name: Build Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}"
+          if ($ref -match "^v") {
+            $version = $ref.TrimStart("v")
+          } else {
+            $version = "0.0.0-dev"
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DIST_ZIP=AI-Video-Transcriber-Windows-$version.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install -r requirements.txt
+          pip install -r requirements-desktop.txt
+
+      - name: Download FFmpeg for Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $zip = "build\ffmpeg.zip"
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath build\ffmpeg-extract -Force
+          $dir = Get-ChildItem build\ffmpeg-extract -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path build\ffmpeg\bin | Out-Null
+          Copy-Item "$($dir.FullName)\bin\ffmpeg.exe" build\ffmpeg\bin\ffmpeg.exe
+          Copy-Item "$($dir.FullName)\bin\ffprobe.exe" build\ffmpeg\bin\ffprobe.exe
+
+      - name: Build desktop app
+        run: pyinstaller --clean --noconfirm AI-Video-Transcriber.spec
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\AI Video Transcriber\*" -DestinationPath "dist\$env:DIST_ZIP" -Force
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\installer.iss
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist/*.zip
+            dist/installer/*.exe
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/installer/*.exe

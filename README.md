@@ -26,6 +26,15 @@ An AI-powered tool to transcribe and summarize videos and podcasts — paste a U
 
 ## 🚀 Quick Start
 
+### Windows Desktop App
+
+Windows users can download the installer from GitHub Releases once a release is published:
+
+- `AI-Video-Transcriber-Setup-<version>.exe` — standard Windows installer
+- `AI-Video-Transcriber-Windows-<version>.zip` — portable app folder
+
+The desktop app runs the FastAPI service locally on `127.0.0.1` and opens it in a native desktop window. Temporary files are stored under the current Windows user's local app data directory. It uses the Microsoft Edge WebView2 runtime, which is preinstalled on most current Windows systems.
+
 ### Prerequisites
 
 - Python 3.8+
@@ -102,6 +111,30 @@ python3 start.py
 ```
 
 After the service starts, open your browser and visit `http://localhost:8000`
+
+### Build the Windows Installer
+
+The repository includes a GitHub Actions workflow that builds the Windows desktop app and installer. Push a version tag to publish release assets automatically:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow builds a PyInstaller desktop app, bundles `ffmpeg.exe` and `ffprobe.exe`, creates a portable zip, and generates an Inno Setup installer.
+
+For a manual Windows build:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+python -m pip install --upgrade pip wheel setuptools
+pip install -r requirements.txt
+pip install -r requirements-desktop.txt
+
+# Put ffmpeg.exe and ffprobe.exe in build\ffmpeg\bin first.
+pyinstaller --clean --noconfirm AI-Video-Transcriber.spec
+```
 
 #### Production Mode (Recommended for long videos)
 
@@ -187,8 +220,8 @@ AI-Video-Transcriber/
 | `OPENAI_API_KEY` | API key (server-side default) | - | No — can be set in UI instead |
 | `HOST` | Server address | `0.0.0.0` | No |
 | `PORT` | Server port | `8000` | No |
-| `WHISPER_MODEL_SIZE` | Whisper model size | `large-v3` | No |
-| `WHISPER_VAD_FILTER` | Enable VAD silence filtering. Keep `false` for maximum completeness | `false` | No |
+| `WHISPER_MODEL_SIZE` | Whisper model size | `medium` | No |
+| `WHISPER_VAD_FILTER` | Enable VAD silence filtering to reduce silence/noise hallucinations | `true` | No |
 | `TRANSCRIPT_EXACT_MODE` | Keep transcript text verbatim after ASR/subtitle extraction; no LLM rewriting | `true` | No |
 | `SUMMARY_SINGLE_PASS_TOKEN_LIMIT` | Estimated token limit before switching to chunked summarization | `12000` | No |
 | `SUMMARY_MAX_OUTPUT_TOKENS` | Maximum output tokens for final summaries | `12000` | No |

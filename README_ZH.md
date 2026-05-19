@@ -24,6 +24,15 @@
 
 ## 🚀 快速开始
 
+### Windows 桌面版
+
+发布 Release 后，Windows 用户可以直接从 GitHub Releases 下载：
+
+- `AI-Video-Transcriber-Setup-<version>.exe`：标准 Windows 安装包
+- `AI-Video-Transcriber-Windows-<version>.zip`：免安装便携版目录
+
+桌面版会在本机 `127.0.0.1` 启动 FastAPI 服务，并用原生桌面窗口打开页面。临时文件会写入当前 Windows 用户的本地 AppData 目录。窗口依赖 Microsoft Edge WebView2 Runtime，较新的 Windows 通常已预装。
+
 ### 环境要求
 
 - Python 3.8+
@@ -101,6 +110,30 @@ python3 start.py
 ```
 
 服务启动后，打开浏览器访问 `http://localhost:8000`
+
+### 构建 Windows 安装包
+
+项目已包含 GitHub Actions 工作流，可以自动构建 Windows 桌面应用和安装包。推送版本 tag 后会自动发布 Release 附件：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+工作流会用 PyInstaller 构建桌面应用，打包 `ffmpeg.exe` 和 `ffprobe.exe`，生成便携 zip，并通过 Inno Setup 生成安装包。
+
+如需在 Windows 本机手动构建：
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+python -m pip install --upgrade pip wheel setuptools
+pip install -r requirements.txt
+pip install -r requirements-desktop.txt
+
+# 先把 ffmpeg.exe 和 ffprobe.exe 放到 build\ffmpeg\bin
+pyinstaller --clean --noconfirm AI-Video-Transcriber.spec
+```
 
 #### 生产模式（推荐用于长视频）
 
@@ -187,8 +220,8 @@ AI-Video-Transcriber/
 | `OPENAI_API_KEY` | API密钥（服务端默认值） | - | 否，可在UI中配置 |
 | `HOST` | 服务器地址 | `0.0.0.0` | 否 |
 | `PORT` | 服务器端口 | `8000` | 否 |
-| `WHISPER_MODEL_SIZE` | Whisper模型大小 | `large-v3` | 否 |
-| `WHISPER_VAD_FILTER` | 是否启用VAD静音过滤；追求完整性时保持 `false` | `false` | 否 |
+| `WHISPER_MODEL_SIZE` | Whisper模型大小 | `medium` | 否 |
+| `WHISPER_VAD_FILTER` | 是否启用VAD静音过滤，用于减少静音/噪声幻觉重复 | `true` | 否 |
 | `TRANSCRIPT_EXACT_MODE` | ASR/字幕提取后逐字保留转录正文，不再用LLM改写 | `true` | 否 |
 | `SUMMARY_SINGLE_PASS_TOKEN_LIMIT` | 进入分块摘要前的估算token阈值 | `12000` | 否 |
 | `SUMMARY_MAX_OUTPUT_TOKENS` | 最终摘要最大输出tokens | `12000` | 否 |

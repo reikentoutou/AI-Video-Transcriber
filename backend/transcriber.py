@@ -29,7 +29,7 @@ class Transcriber:
         Args:
             model_size: Whisper模型大小 (tiny, base, small, medium, large)
         """
-        self.model_size = model_size or os.getenv("WHISPER_MODEL_SIZE", "large-v3")
+        self.model_size = model_size or os.getenv("WHISPER_MODEL_SIZE", "medium")
         self.compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
         self.model = None
         self.last_detected_language = None
@@ -69,17 +69,17 @@ class Transcriber:
             # 直接调用会阻塞事件循环；放入线程避免阻塞
             import asyncio
             def _do_transcribe():
-                vad_filter = _env_bool("WHISPER_VAD_FILTER", False)
+                vad_filter = _env_bool("WHISPER_VAD_FILTER", True)
                 transcribe_kwargs = {
                     "language": language,
-                    "beam_size": _env_int("WHISPER_BEAM_SIZE", 10),
-                    "best_of": _env_int("WHISPER_BEST_OF", 10),
+                    "beam_size": _env_int("WHISPER_BEAM_SIZE", 5),
+                    "best_of": _env_int("WHISPER_BEST_OF", 5),
                     "temperature": 0.0,
                     "vad_filter": vad_filter,
                     "no_speech_threshold": float(os.getenv("WHISPER_NO_SPEECH_THRESHOLD", "0.8")),
                     "compression_ratio_threshold": float(os.getenv("WHISPER_COMPRESSION_RATIO_THRESHOLD", "2.4")),
                     "log_prob_threshold": float(os.getenv("WHISPER_LOG_PROB_THRESHOLD", "-1.0")),
-                    "condition_on_previous_text": _env_bool("WHISPER_CONDITION_PREVIOUS_TEXT", True),
+                    "condition_on_previous_text": _env_bool("WHISPER_CONDITION_PREVIOUS_TEXT", False),
                     "word_timestamps": _env_bool("WHISPER_WORD_TIMESTAMPS", False),
                 }
                 initial_prompt = os.getenv("WHISPER_INITIAL_PROMPT", "").strip()
@@ -87,7 +87,7 @@ class Transcriber:
                     transcribe_kwargs["initial_prompt"] = initial_prompt
                 if vad_filter:
                     transcribe_kwargs["vad_parameters"] = {
-                        "min_silence_duration_ms": _env_int("WHISPER_VAD_MIN_SILENCE_MS", 2000),
+                        "min_silence_duration_ms": _env_int("WHISPER_VAD_MIN_SILENCE_MS", 1200),
                         "speech_pad_ms": _env_int("WHISPER_VAD_SPEECH_PAD_MS", 400),
                     }
                 return self.model.transcribe(
@@ -178,7 +178,8 @@ class Transcriber:
             lines = transcript_text.split('\n')
             for line in lines:
                 if "**Detected Language:**" in line:
-                    lang = line.split(":")[-1].strip()
+                    lang = line.replace("**Detected Language:**", "", 1).strip()
+                    lang = lang.strip("*").strip()
                     return lang if lang else None
         
         return None

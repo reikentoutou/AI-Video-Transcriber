@@ -12,6 +12,7 @@ import uuid
 import json
 import re
 import openai
+import sys
 
 from video_processor import VideoProcessor
 from transcriber import Transcriber
@@ -33,15 +34,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _project_root() -> Path:
+    """Return the source root, or the PyInstaller extraction root when frozen."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
+    return Path(__file__).parent.parent
+
+
 # 获取项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = _project_root()
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "static")), name="static")
 
-# 创建临时目录
-TEMP_DIR = PROJECT_ROOT / "temp"
-TEMP_DIR.mkdir(exist_ok=True)
+# 创建临时目录。桌面打包版通过环境变量写入用户 AppData，避免写入安装目录/临时解包目录。
+TEMP_DIR = Path(os.getenv("AI_VIDEO_TRANSCRIBER_TEMP_DIR", str(PROJECT_ROOT / "temp")))
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # 初始化处理器
 video_processor = VideoProcessor()
